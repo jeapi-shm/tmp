@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>6×4 추첨 페이지</title>
+  <style>
+    :root{ --bg:#0f1220; --panel:#151935; --panel-2:#0d1027; --text:#f2f5ff; --muted:#9aa3c7; --accent:#6ea8fe; --good:#3ddc97; --warn:#ffc857; --danger:#ef476f; --card:#1b2148; --card-front:#101532; --shadow:0 10px 30px rgba(0,0,0,.35); --radius:18px }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple SD Gothic Neo, Noto Sans KR, "맑은 고딕", sans-serif; background: radial-gradient(1200px 800px at 70% -100px, #24306a 0%, transparent 60%), linear-gradient(180deg, var(--bg), #0a0c1a 60%); color:var(--text)}
+    .container{max-width:1100px;margin:24px auto 40px; padding:0 16px}
+    header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px}
+    h1{font-size:22px; margin:0; letter-spacing:.2px}
+    .toolbar{display:flex; flex-wrap:wrap; gap:8px}
+    button{appearance:none; border:1px solid #2a3266; background:linear-gradient(180deg,var(--panel) 0%, var(--panel-2) 100%); color:var(--text); padding:10px 14px; border-radius:12px; cursor:pointer; box-shadow:var(--shadow); font-weight:600; letter-spacing:.2px; transition: transform .08s ease, border-color .2s ease, background .2s ease}
+    button:hover{transform:translateY(-1px); border-color:#3a4591}
+    button:active{transform:translateY(0)}
+    button.primary{background:linear-gradient(180deg,#2a59ff,#2547c7); border-color:#3b63ff}
+    button.good{background:linear-gradient(180deg,#1dbb7f,#139561); border-color:#1cc28a}
+
+    .view{display:none}
+    .view.active{display:block}
+
+    .setup{display:grid; gap:16px}
+    .setup-card{padding:18px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border:1px solid #2a3266; border-radius:var(--radius); box-shadow:var(--shadow)}
+    .setup h2{margin:0 0 10px; font-size:18px}
+    .setup .hint{font-size:13px; color:var(--muted); margin-bottom:10px}
+    textarea{width:100%; min-height:240px; resize:vertical; border-radius:12px; border:1px solid #2a3266; background:#0f1433; color:#f2f5ff; padding:10px; font-size:14px}
+
+    .board{position:relative; padding:16px; background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border:1px solid #2a3266; border-radius:var(--radius); box-shadow:var(--shadow)}
+    .grid{--cols:6; --rows:4; --gap:10px; display:grid; grid-template-columns: repeat(var(--cols), 1fr); grid-auto-rows:1fr; gap:var(--gap); aspect-ratio: 6/4}
+    .card{ position:relative; perspective:1200px; user-select:none; cursor:pointer }
+    .card > .inner{ position:absolute; inset:0; border-radius:16px; transform-style:preserve-3d; transition: transform .5s cubic-bezier(.2,.7,.2,1), box-shadow .3s ease; box-shadow:0 16px 30px rgba(0,0,0,.25), 0 0 0 1px #2a3266 inset }
+    .card .front, .card .back{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; border-radius:16px; backface-visibility:hidden }
+    .card .front{ background:radial-gradient(300px 220px at 60% -40%, rgba(255,255,255,.1), transparent 60%), linear-gradient(180deg, var(--card), var(--card-front)); color:var(--muted); font-weight:700; font-size: clamp(14px, 2.5vw, 20px); border:1px solid #2a3266; z-index:1 }
+    .card .back{ transform:rotateY(180deg); border:1px solid #384296; background:linear-gradient(180deg, #25307a, #1a2154); font-size: clamp(18px, 3vw, 30px); color:#fff; text-align:center; padding:10px; font-weight:700; z-index:2 }
+    .card.revealed .inner{ transform:rotateY(180deg); box-shadow:0 20px 40px rgba(15,138,255,.35), 0 0 0 2px rgba(110,168,254,.35) inset }
+    .card.revealed .back{ z-index:3 }
+    .card.winner .back{ animation: winnerFlash 1s ease-out 2; box-shadow:0 0 15px 5px rgba(61,220,151,.7), 0 0 30px rgba(61,220,151,.6); }
+
+    @keyframes winnerFlash {
+      0% { transform: scale(1); background:#1a2154; }
+      50% { transform: scale(1.15); background:#28a745; color:#fff; }
+      100% { transform: scale(1); background:#1a2154; }
+    }
+
+    #confetti{position:fixed; inset:0; pointer-events:none}
+  </style>
+</head>
+<body>
+  <canvas id="confetti"></canvas>
+  <div class="container">
+    <header>
+      <h1 id="title">6×4 추첨 페이지</h1>
+      <div class="toolbar" id="gameToolbar" style="display:none">
+        <button class="primary" id="btnDraw">무작위 선택</button>
+        <button class="good" id="btnRevealAll">모두 뒤집기</button>
+        <button id="btnReset">처음으로</button>
+      </div>
+    </header>
+
+    <!-- Setup View -->
+    <section id="setupView" class="view active">
+      <div class="setup">
+        <div class="setup-card">
+          <h2>당첨 상품 입력</h2>
+          <div class="hint">한 줄에 하나씩 당첨 상품만 입력하세요. 입력하지 않은 나머지 칸은 자동으로 꽝이 됩니다.</div>
+          <textarea id="winnerInput">스마트모니터
+갤럭시버즈3(블랙)
+갤럭시버즈3(화이트)</textarea>
+          <button id="btnStart" class="primary">시작</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Game View -->
+    <section id="gameView" class="view">
+      <div class="board">
+        <div class="grid" id="grid"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const COLS=6, ROWS=4, TOTAL=COLS*ROWS;
+    const grid=document.getElementById('grid');
+    const setupView=document.getElementById('setupView');
+    const gameView=document.getElementById('gameView');
+    const gameToolbar=document.getElementById('gameToolbar');
+    const winnerInput=document.getElementById('winnerInput');
+
+    let labels=[], revealed=[];
+
+    document.getElementById('btnStart').addEventListener('click', ()=>{
+      let winners=winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      const arr=Array(TOTAL).fill('꽝');
+      const idxs=[...Array(TOTAL).keys()];
+      for(let i=idxs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idxs[i],idxs[j]]=[idxs[j],idxs[i]];}
+      winners.forEach((w,i)=>{ if(i<TOTAL) arr[idxs[i]]=w; });
+      labels=arr; revealed=Array(TOTAL).fill(false);
+      buildGrid();
+      setupView.classList.remove('active'); gameView.classList.add('active'); gameToolbar.style.display='flex';
+    });
+
+    function buildGrid(){
+      grid.innerHTML='';
+      for(let i=0;i<TOTAL;i++){
+        const card=document.createElement('div');
+        card.className='card';
+        card.innerHTML=`<div class="inner"><div class="front">CARD ${i+1}</div><div class="back">${escapeHtml(labels[i])}</div></div>`;
+        card.addEventListener('click',()=>reveal(i));
+        grid.appendChild(card);
+      }
+    }
+
+    function escapeHtml(str){
+      return String(str).replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s]));
+    }
+
+    function reveal(i){
+      if(!revealed[i]){
+        revealed[i]=true;
+        const card=grid.children[i];
+        card.classList.add('revealed');
+        if(labels[i] !== '꽝'){
+          card.classList.add('winner');
+          launchConfetti(card.getBoundingClientRect());
+        }
+      }
+    }
+
+    // 무작위 선택 버튼: 짧게 누르면 랜덤, 1초 이상 길게 누르면 규칙 적용
+    const btnDraw=document.getElementById('btnDraw');
+    let drawTimer=null, drawLong=false;
+
+    function randomDraw(){
+      const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
+      if(!hidden.length)return;
+      const pick=hidden[Math.floor(Math.random()*hidden.length)];
+      reveal(pick);
+    }
+
+    function drawSmart(){
+      const firstPrize = winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)[0];
+      if(firstPrize){
+        const idx=labels.findIndex((v,i)=>!revealed[i] && v===firstPrize);
+        if(idx>=0){
+          reveal(idx);
+          return;
+        }
+      }
+      const hiddenLoss=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i] && o.v==='꽝').map(o=>o.i);
+      if(hiddenLoss.length){
+        const pick=hiddenLoss[Math.floor(Math.random()*hiddenLoss.length)];
+        reveal(pick);
+        return;
+      }
+      randomDraw();
+    }
+
+    function drawStart(){
+      drawLong=false; clearTimeout(drawTimer);
+      drawTimer=setTimeout(()=>{drawLong=true; drawSmart();},1000);
+    }
+    function drawEnd(){
+      clearTimeout(drawTimer);
+      if(!drawLong){ randomDraw(); }
+    }
+    btnDraw.addEventListener('mousedown',drawStart);
+    btnDraw.addEventListener('touchstart',drawStart,{passive:true});
+    ;['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>btnDraw.addEventListener(ev,drawEnd));
+    btnDraw.addEventListener('click',e=>e.preventDefault());
+
+    document.getElementById('btnRevealAll').addEventListener('click',()=>{revealed=Array(TOTAL).fill(true);[...grid.children].forEach(c=>c.classList.add('revealed'));});
+    document.getElementById('btnReset').addEventListener('click',()=>{setupView.classList.add('active');gameView.classList.remove('active');gameToolbar.style.display='none';winnerInput.value='스마트모니터\n갤럭시버즈3(블랙)\n갤럭시버즈3(화이트)';});
+
+    // Confetti animation
+    const cvs=document.getElementById('confetti');
+    const ctx=cvs.getContext('2d');
+    let confettiPieces=[]; let animId=null;
+    function resizeCanvas(){cvs.width=innerWidth; cvs.height=innerHeight}
+    addEventListener('resize',resizeCanvas); resizeCanvas();
+
+    function launchConfetti(rect){
+      const cx=rect.left+rect.width/2; const cy=rect.top+rect.height/2;
+      for(let i=0;i<100;i++){
+        const angle=Math.random()*Math.PI*2; const speed=2+Math.random()*6;
+        confettiPieces.push({x:cx,y:cy,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-4,g:.15+Math.random()*.1,w:4+Math.random()*4,h:6+Math.random()*8,r:Math.random()*Math.PI,vr:(Math.random()-.5)*.3,life:100+Math.random()*40});
+      }
+      if(!animId) loop();
+    }
+
+    function loop(){
+      animId=requestAnimationFrame(loop);
+      ctx.clearRect(0,0,cvs.width,cvs.height);
+      confettiPieces=confettiPieces.filter(p=>p.life>0);
+      for(const p of confettiPieces){
+        p.vy+=p.g; p.x+=p.vx; p.y+=p.vy; p.r+=p.vr; p.life--;
+        ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r);
+        ctx.fillStyle=`hsl(${(p.life*7)%360},90%,60%)`;
+        ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        ctx.restore();
+      }
+      if(confettiPieces.length===0){cancelAnimationFrame(animId);animId=null}
+    }
+  </script>
+</body>
+</html>
