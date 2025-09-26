@@ -115,7 +115,7 @@
     }
 
     function escapeHtml(str){
-      return String(str).replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s]));
+      return String(str).replace(/[&<>\"]g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s]));
     }
 
     function reveal(i){
@@ -132,7 +132,7 @@
 
     // 무작위 선택 버튼: 짧게 누르면 랜덤, 1초 이상 길게 누르면 규칙 적용
     const btnDraw=document.getElementById('btnDraw');
-    let drawTimer=null, drawLong=false;
+    let drawTimer=null, drawLong=false, drawExecuted=false;
 
     function randomDraw(){
       const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
@@ -160,12 +160,12 @@
     }
 
     function drawStart(){
-      drawLong=false; clearTimeout(drawTimer);
-      drawTimer=setTimeout(()=>{drawLong=true; drawSmart();},1000);
+      drawLong=false; drawExecuted=false; clearTimeout(drawTimer);
+      drawTimer=setTimeout(()=>{drawLong=true; drawSmart(); drawExecuted=true;},1000);
     }
     function drawEnd(){
       clearTimeout(drawTimer);
-      if(!drawLong){ randomDraw(); }
+      if(!drawLong && !drawExecuted){ randomDraw(); drawExecuted=true; }
     }
     btnDraw.addEventListener('mousedown',drawStart);
     btnDraw.addEventListener('touchstart',drawStart,{passive:true});
