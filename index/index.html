@@ -18,7 +18,7 @@
     button:active{transform:translateY(0)}
     button.primary{background:linear-gradient(180deg,#2a59ff,#2547c7); border-color:#3b63ff}
     /* 모바일 중복 터치 방지 */
-    #btnDraw{ touch-action: manipulation; }
+    #btnDraw{ touch-action: manipulation; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
     button.good{background:linear-gradient(180deg,#1dbb7f,#139561); border-color:#1cc28a}
 
     .view{display:none}
@@ -156,7 +156,9 @@ function randomDraw(){
 
 function drawSmart(){
   if(!canInteract()) return;
-  const firstPrize = winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)[0];
+  const firstPrize = winnerInput.value.split(/
+?
+/).map(s=>s.trim()).filter(Boolean)[0];
   if(firstPrize){
     const idx=labels.findIndex((v,i)=>!revealed[i] && v===firstPrize);
     if(idx>=0){ reveal(idx); lock(250); return; }
@@ -189,6 +191,8 @@ btnDraw.addEventListener('pointerup', drawEnd);
 btnDraw.addEventListener('pointerleave', drawCancel);
 btnDraw.addEventListener('pointercancel', drawCancel);
 btnDraw.addEventListener('click', e=> e.preventDefault());
+btnDraw.setAttribute('draggable','false');
+;['contextmenu','selectstart','dragstart'].forEach(ev=> btnDraw.addEventListener(ev, e=> e.preventDefault()));
 
     document.getElementById('btnRevealAll').addEventListener('click',()=>{revealed=Array(TOTAL).fill(true);[...grid.children].forEach(c=>c.classList.add('revealed'));});
     document.getElementById('btnReset').addEventListener('click',()=>{setupView.classList.add('active');gameView.classList.remove('active');gameToolbar.style.display='none';winnerInput.value='스마트모니터\n갤럭시버즈3(블랙)\n갤럭시버즈3(화이트)';});
