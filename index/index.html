@@ -173,7 +173,7 @@
     let lastDrawTime = 0;
     function canDraw() {
       const now = Date.now();
-      if (now - lastDrawTime < 3000) return false;
+      if (now - lastDrawTime < 300) return false;
       lastDrawTime = now;
       return true;
     }
