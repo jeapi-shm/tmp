@@ -17,8 +17,6 @@
     button:hover{transform:translateY(-1px); border-color:#3a4591}
     button:active{transform:translateY(0)}
     button.primary{background:linear-gradient(180deg,#2a59ff,#2547c7); border-color:#3b63ff}
-    /* 모바일 중복 터치 방지 */
-    #btnDraw{ touch-action: manipulation; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
     button.good{background:linear-gradient(180deg,#1dbb7f,#139561); border-color:#1cc28a}
 
     .view{display:none}
@@ -56,9 +54,10 @@
     <header>
       <h1 id="title">6×4 추첨 페이지</h1>
       <div class="toolbar" id="gameToolbar" style="display:none">
-        <button class="primary" id="btnDraw">무작위 선택</button>
-        <button class="good" id="btnRevealAll">모두 뒤집기</button>
-        <button id="btnReset">처음으로</button>
+  <button class="primary" id="btnDraw">무작위 선택</button>
+  <button class="good" id="btnRevealAll">모두 뒤집기</button>
+  <button id="btnUndo">실행 취소</button>
+
       </div>
     </header>
 
@@ -70,7 +69,11 @@
           <div class="hint">한 줄에 하나씩 당첨 상품만 입력하세요. 입력하지 않은 나머지 칸은 자동으로 꽝이 됩니다.</div>
           <textarea id="winnerInput">스마트모니터
 갤럭시버즈3(블랙)
-갤럭시버즈3(화이트)</textarea>
+갤럭시버즈3(화이트)
+오승환 은퇴 기념품
+스타벅스 기프트카드
+스타벅스 기프트카드
+</textarea>
           <button id="btnStart" class="primary">시작</button>
         </div>
       </div>
@@ -81,7 +84,7 @@
       <div class="board">
         <div class="grid" id="grid"></div>
       </div>
-    </section>
+
   </div>
 
   <script>
@@ -92,16 +95,10 @@
     const gameToolbar=document.getElementById('gameToolbar');
     const winnerInput=document.getElementById('winnerInput');
 
-    let labels=[], revealed=[];
-    // 클릭/터치 전파로 인한 의도치 않은 뒤집힘 방지용 인터랙션 락
-    let inputLockUntil = 0;
-    function lock(ms=600){ inputLockUntil = Date.now() + ms; }
-    function canInteract(){ return Date.now() >= inputLockUntil; }
+  let labels=[], revealed=[];
+  let undoStack = [];
 
-    document.getElementById('btnStart').addEventListener('click', (e)=>{
-      // 시작 버튼 클릭 이벤트가 그 다음 화면의 카드로 버블링되지 않도록
-      e.preventDefault(); e.stopPropagation(); lock(700);
-
+    document.getElementById('btnStart').addEventListener('click', ()=>{
       let winners=winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
       const arr=Array(TOTAL).fill('꽝');
       const idxs=[...Array(TOTAL).keys()];
@@ -110,8 +107,6 @@
       labels=arr; revealed=Array(TOTAL).fill(false);
       buildGrid();
       setupView.classList.remove('active'); gameView.classList.add('active'); gameToolbar.style.display='flex';
-      // 전환 직후 모바일의 지연된 클릭이 카드에 떨어지는 것을 방지
-      lock(700);
     });
 
     function buildGrid(){
@@ -120,18 +115,19 @@
         const card=document.createElement('div');
         card.className='card';
         card.innerHTML=`<div class="inner"><div class="front">CARD ${i+1}</div><div class="back">${escapeHtml(labels[i])}</div></div>`;
-        card.addEventListener('click',(ev)=>{ if(!canInteract()) return; reveal(i); });
+        card.addEventListener('click',()=>reveal(i));
         grid.appendChild(card);
       }
     }
 
     function escapeHtml(str){
-      return String(str).replace(/[&<>\"]/g, s => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s]));
+      return String(str).replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s]));
     }
 
     function reveal(i){
       if(!revealed[i]){
         revealed[i]=true;
+        undoStack.push(i); // 실행 취소용 스택에 기록
         const card=grid.children[i];
         card.classList.add('revealed');
         if(labels[i] !== '꽝'){
@@ -141,61 +137,87 @@
       }
     }
 
-    // 무작위 선택 버튼: 짧게 누르면 랜덤, 1초 이상 길게 누르면 규칙 적용
+    function undoReveal(){
+      if(undoStack.length === 0) return;
+      const i = undoStack.pop();
+      revealed[i] = false;
+      const card = grid.children[i];
+      if(card) {
+        card.classList.remove('revealed');
+        card.classList.remove('winner');
+      }
+      // 뒤집히지 않은 카드의 label을 섞기
+      const hiddenIdx = labels.map((_, idx) => idx).filter(idx => !revealed[idx]);
+      const hiddenLabels = hiddenIdx.map(idx => labels[idx]);
+      // Fisher-Yates shuffle
+      for(let j=hiddenLabels.length-1;j>0;j--){
+        const k=Math.floor(Math.random()*(j+1));
+        [hiddenLabels[j],hiddenLabels[k]]=[hiddenLabels[k],hiddenLabels[j]];
+      }
+      hiddenIdx.forEach((idx, j) => {
+        labels[idx] = hiddenLabels[j];
+        // 카드 뒷면 텍스트 갱신
+        const card = grid.children[idx];
+        if(card) {
+          card.querySelector('.back').textContent = labels[idx];
+        }
+      });
+    }
+
+
+    // 무작위 선택 버튼: 짧게 누르면 랜덤, 1초 이상 길게 누르면 '스마트모니터' 당첨
     const btnDraw=document.getElementById('btnDraw');
-let drawTimer=null, drawLong=false, drawExecuted=false, pressToken=0;
+    let drawTimer=null, drawLong=false;
 
-function randomDraw(){
-  if(!canInteract()) return;
-  const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
-  if(!hidden.length)return;
-  const pick=hidden[Math.floor(Math.random()*hidden.length)];
-  reveal(pick);
-  lock(250);
-}
 
-function drawSmart(){
-  if(!canInteract()) return;
-  const firstPrize = winnerInput.value.split(/
-?
-/).map(s=>s.trim()).filter(Boolean)[0];
-  if(firstPrize){
-    const idx=labels.findIndex((v,i)=>!revealed[i] && v===firstPrize);
-    if(idx>=0){ reveal(idx); lock(250); return; }
-  }
-  const hiddenLoss=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i] && o.v==='꽝').map(o=>o.i);
-  if(hiddenLoss.length){ const pick=hiddenLoss[Math.floor(Math.random()*hiddenLoss.length)]; reveal(pick); lock(250); return; }
-  randomDraw();
-}
+    let lastDrawTime = 0;
+    function canDraw() {
+      const now = Date.now();
+      if (now - lastDrawTime < 3000) return false;
+      lastDrawTime = now;
+      return true;
+    }
 
-function drawStart(e){
-  if(!canInteract()) return;
-  e.preventDefault();
-  drawLong=false; drawExecuted=false; clearTimeout(drawTimer);
-  pressToken++; const token=pressToken;
-  drawTimer=setTimeout(()=>{
-    if(token!==pressToken || drawExecuted) return; // 취소되었거나 이미 실행됨
-    drawLong=true; drawSmart(); drawExecuted=true;
-  }, 1000);
-}
-function drawEnd(e){
-  e.preventDefault();
-  clearTimeout(drawTimer);
-  if(drawExecuted) return; // 이미 길게누름 처리됨
-  if(!drawLong){ randomDraw(); drawExecuted=true; }
-}
-function drawCancel(){ clearTimeout(drawTimer); }
+    function randomDraw(){
+      if(!canDraw()) return;
+      const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
+      if(!hidden.length)return;
+      const pick=hidden[Math.floor(Math.random()*hidden.length)];
+      reveal(pick);
+    }
 
-btnDraw.addEventListener('pointerdown', drawStart);
-btnDraw.addEventListener('pointerup', drawEnd);
-btnDraw.addEventListener('pointerleave', drawCancel);
-btnDraw.addEventListener('pointercancel', drawCancel);
-btnDraw.addEventListener('click', e=> e.preventDefault());
-btnDraw.setAttribute('draggable','false');
-;['contextmenu','selectstart','dragstart'].forEach(ev=> btnDraw.addEventListener(ev, e=> e.preventDefault()));
+    function drawSmart(){
+      if(!canDraw()) return;
+      // '스마트모니터'가 남아있으면 반드시 당첨
+      const idx=labels.findIndex((v,i)=>!revealed[i] && v==='스마트모니터');
+      if(idx>=0){
+        reveal(idx);
+        return;
+      }
+      randomDraw();
+    }
 
-    document.getElementById('btnRevealAll').addEventListener('click',()=>{revealed=Array(TOTAL).fill(true);[...grid.children].forEach(c=>c.classList.add('revealed'));});
-    document.getElementById('btnReset').addEventListener('click',()=>{setupView.classList.add('active');gameView.classList.remove('active');gameToolbar.style.display='none';winnerInput.value='스마트모니터\n갤럭시버즈3(블랙)\n갤럭시버즈3(화이트)';});
+    function drawStart(){
+      drawLong=false; clearTimeout(drawTimer);
+      drawTimer=setTimeout(()=>{drawLong=true;},1000);
+    }
+    function drawEnd(){
+      clearTimeout(drawTimer);
+      if(drawLong) {
+        drawSmart();
+        return;
+      } 
+      // 이미 drawSmart가 실행된 경우 아무것도 하지 않음
+      randomDraw();
+    }
+    btnDraw.addEventListener('mousedown',drawStart);
+    btnDraw.addEventListener('touchstart',drawStart,{passive:true});
+    ;['mouseup','touchend'].forEach(ev=>btnDraw.addEventListener(ev,drawEnd));
+    btnDraw.addEventListener('click',e=>e.preventDefault());
+
+  document.getElementById('btnRevealAll').addEventListener('click',()=>{revealed=Array(TOTAL).fill(true);[...grid.children].forEach(c=>c.classList.add('revealed'));});
+  document.getElementById('btnUndo').addEventListener('click',undoReveal);
+
 
     // Confetti animation
     const cvs=document.getElementById('confetti');
