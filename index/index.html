@@ -17,6 +17,8 @@
     button:hover{transform:translateY(-1px); border-color:#3a4591}
     button:active{transform:translateY(0)}
     button.primary{background:linear-gradient(180deg,#2a59ff,#2547c7); border-color:#3b63ff}
+    /* 모바일 중복 터치 방지 */
+    #btnDraw{ touch-action: manipulation; }
     button.good{background:linear-gradient(180deg,#1dbb7f,#139561); border-color:#1cc28a}
 
     .view{display:none}
@@ -141,47 +143,52 @@
 
     // 무작위 선택 버튼: 짧게 누르면 랜덤, 1초 이상 길게 누르면 규칙 적용
     const btnDraw=document.getElementById('btnDraw');
-    let drawTimer=null, drawLong=false, drawExecuted=false;
+let drawTimer=null, drawLong=false, drawExecuted=false, pressToken=0;
 
-    function randomDraw(){
-      if(!canInteract()) return;
-      const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
-      if(!hidden.length)return;
-      const pick=hidden[Math.floor(Math.random()*hidden.length)];
-      reveal(pick);
-    }
+function randomDraw(){
+  if(!canInteract()) return;
+  const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
+  if(!hidden.length)return;
+  const pick=hidden[Math.floor(Math.random()*hidden.length)];
+  reveal(pick);
+  lock(250);
+}
 
-    function drawSmart(){
-      const firstPrize = winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)[0];
-      if(firstPrize){
-        const idx=labels.findIndex((v,i)=>!revealed[i] && v===firstPrize);
-        if(idx>=0){
-          reveal(idx);
-          return;
-        }
-      }
-      const hiddenLoss=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i] && o.v==='꽝').map(o=>o.i);
-      if(hiddenLoss.length){
-        const pick=hiddenLoss[Math.floor(Math.random()*hiddenLoss.length)];
-        reveal(pick);
-        return;
-      }
-      randomDraw();
-    }
+function drawSmart(){
+  if(!canInteract()) return;
+  const firstPrize = winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)[0];
+  if(firstPrize){
+    const idx=labels.findIndex((v,i)=>!revealed[i] && v===firstPrize);
+    if(idx>=0){ reveal(idx); lock(250); return; }
+  }
+  const hiddenLoss=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i] && o.v==='꽝').map(o=>o.i);
+  if(hiddenLoss.length){ const pick=hiddenLoss[Math.floor(Math.random()*hiddenLoss.length)]; reveal(pick); lock(250); return; }
+  randomDraw();
+}
 
-    function drawStart(){
-      if(!canInteract()) return; // 락 상태에서는 무시
-      drawLong=false; drawExecuted=false; clearTimeout(drawTimer);
-      drawTimer=setTimeout(()=>{drawLong=true; drawSmart(); drawExecuted=true;},1000);
-    }
-    function drawEnd(){
-      clearTimeout(drawTimer);
-      if(!drawLong && !drawExecuted){ randomDraw(); drawExecuted=true; }
-    }
-    btnDraw.addEventListener('mousedown',drawStart);
-    btnDraw.addEventListener('touchstart',drawStart,{passive:true});
-    ;['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>btnDraw.addEventListener(ev,drawEnd));
-    btnDraw.addEventListener('click',e=>e.preventDefault());
+function drawStart(e){
+  if(!canInteract()) return;
+  e.preventDefault();
+  drawLong=false; drawExecuted=false; clearTimeout(drawTimer);
+  pressToken++; const token=pressToken;
+  drawTimer=setTimeout(()=>{
+    if(token!==pressToken || drawExecuted) return; // 취소되었거나 이미 실행됨
+    drawLong=true; drawSmart(); drawExecuted=true;
+  }, 1000);
+}
+function drawEnd(e){
+  e.preventDefault();
+  clearTimeout(drawTimer);
+  if(drawExecuted) return; // 이미 길게누름 처리됨
+  if(!drawLong){ randomDraw(); drawExecuted=true; }
+}
+function drawCancel(){ clearTimeout(drawTimer); }
+
+btnDraw.addEventListener('pointerdown', drawStart);
+btnDraw.addEventListener('pointerup', drawEnd);
+btnDraw.addEventListener('pointerleave', drawCancel);
+btnDraw.addEventListener('pointercancel', drawCancel);
+btnDraw.addEventListener('click', e=> e.preventDefault());
 
     document.getElementById('btnRevealAll').addEventListener('click',()=>{revealed=Array(TOTAL).fill(true);[...grid.children].forEach(c=>c.classList.add('revealed'));});
     document.getElementById('btnReset').addEventListener('click',()=>{setupView.classList.add('active');gameView.classList.remove('active');gameToolbar.style.display='none';winnerInput.value='스마트모니터\n갤럭시버즈3(블랙)\n갤럭시버즈3(화이트)';});
