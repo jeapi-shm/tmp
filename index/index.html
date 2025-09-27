@@ -91,8 +91,15 @@
     const winnerInput=document.getElementById('winnerInput');
 
     let labels=[], revealed=[];
+    // 클릭/터치 전파로 인한 의도치 않은 뒤집힘 방지용 인터랙션 락
+    let inputLockUntil = 0;
+    function lock(ms=600){ inputLockUntil = Date.now() + ms; }
+    function canInteract(){ return Date.now() >= inputLockUntil; }
 
-    document.getElementById('btnStart').addEventListener('click', ()=>{
+    document.getElementById('btnStart').addEventListener('click', (e)=>{
+      // 시작 버튼 클릭 이벤트가 그 다음 화면의 카드로 버블링되지 않도록
+      e.preventDefault(); e.stopPropagation(); lock(700);
+
       let winners=winnerInput.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
       const arr=Array(TOTAL).fill('꽝');
       const idxs=[...Array(TOTAL).keys()];
@@ -101,6 +108,8 @@
       labels=arr; revealed=Array(TOTAL).fill(false);
       buildGrid();
       setupView.classList.remove('active'); gameView.classList.add('active'); gameToolbar.style.display='flex';
+      // 전환 직후 모바일의 지연된 클릭이 카드에 떨어지는 것을 방지
+      lock(700);
     });
 
     function buildGrid(){
@@ -109,7 +118,7 @@
         const card=document.createElement('div');
         card.className='card';
         card.innerHTML=`<div class="inner"><div class="front">CARD ${i+1}</div><div class="back">${escapeHtml(labels[i])}</div></div>`;
-        card.addEventListener('click',()=>reveal(i));
+        card.addEventListener('click',(ev)=>{ if(!canInteract()) return; reveal(i); });
         grid.appendChild(card);
       }
     }
@@ -135,6 +144,7 @@
     let drawTimer=null, drawLong=false, drawExecuted=false;
 
     function randomDraw(){
+      if(!canInteract()) return;
       const hidden=labels.map((v,i)=>({v,i})).filter(o=>!revealed[o.i]).map(o=>o.i);
       if(!hidden.length)return;
       const pick=hidden[Math.floor(Math.random()*hidden.length)];
@@ -160,6 +170,7 @@
     }
 
     function drawStart(){
+      if(!canInteract()) return; // 락 상태에서는 무시
       drawLong=false; drawExecuted=false; clearTimeout(drawTimer);
       drawTimer=setTimeout(()=>{drawLong=true; drawSmart(); drawExecuted=true;},1000);
     }
